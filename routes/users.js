@@ -14,6 +14,101 @@ const {
 const router = express.Router();
 
 /**
+ * @swagger
+ * components:
+ *   schemas:
+ *     UserRegistration:
+ *       type: object
+ *       required:
+ *         - username
+ *         - email
+ *         - password
+ *       properties:
+ *         username:
+ *           type: string
+ *           description: Unique username
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: User email address
+ *         password:
+ *           type: string
+ *           minLength: 8
+ *           description: User password
+ *     UserLogin:
+ *       type: object
+ *       required:
+ *         - email
+ *         - password
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: User email address
+ *         password:
+ *           type: string
+ *           description: User password
+ *     UserResponse:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *           description: User ID
+ *         username:
+ *           type: string
+ *           description: Username
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: User email
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *           description: Account creation date
+ */
+
+/**
+ * @swagger
+ * /api/users/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UserRegistration'
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: User registered successfully
+ *                 user:
+ *                   $ref: '#/components/schemas/UserResponse'
+ *                 token:
+ *                   type: string
+ *                   description: JWT token
+ *       409:
+ *         description: User already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Registration failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+/**
  * POST /api/users/register
  * Register a new user
  */
@@ -73,6 +168,47 @@ router.post(
 );
 
 /**
+ * @swagger
+ * /api/users/login:
+ *   post:
+ *     summary: Login user
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UserLogin'
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Login successful
+ *                 user:
+ *                   $ref: '#/components/schemas/UserResponse'
+ *                 token:
+ *                   type: string
+ *                   description: JWT token
+ *       401:
+ *         description: Authentication failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Login failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+/**
  * POST /api/users/login
  * Login user
  */
@@ -130,6 +266,43 @@ router.post("/login", validateRequest(userLoginSchema), async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/users/profile:
+ *   get:
+ *     summary: Get user profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   $ref: '#/components/schemas/UserResponse'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Failed to fetch profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 /**
  * GET /api/users/profile
  * Get user profile (requires authentication)

@@ -70,6 +70,7 @@ DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=invoice_db
 DB_PORT=3306
+DB_RESET=false
 
 # Server Configuration
 PORT=3000
@@ -83,6 +84,13 @@ JWT_EXPIRES_IN=24h
 # Bcrypt Configuration
 BCRYPT_ROUNDS=12
 ```
+
+### Database Configuration
+
+- **`DB_RESET`**: Controls database table management at startup
+  - `false` (default): Tables are created if they don't exist
+  - `true`: **⚠️ WARNING**: All existing tables will be dropped and recreated on startup
+  - Use with caution as this will **permanently delete all data**
 
 ### API_SECURE Configuration
 
@@ -206,6 +214,8 @@ Authorization: Bearer <your-jwt-token>
 Content-Type: application/json
 
 {
+  "clientId": 1,
+  "invoiceId": 1,
   "method": "Bank Transfer",
   "accountName": "ACME Corp",
   "accountNumber": "1234567890",
@@ -253,6 +263,69 @@ DELETE /api/payment-details/:id
 Authorization: Bearer <your-jwt-token>
 ```
 
+### Clients
+
+#### Create Client
+
+```http
+POST /api/clients
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+
+{
+  "name": "ACME Corporation",
+  "email": "contact@acme.com",
+  "phone": "+1-555-0123",
+  "address": "123 Business St",
+  "city": "New York",
+  "postalCode": "10001",
+  "country": "USA",
+  "taxId": "12-3456789",
+  "notes": "Important client"
+}
+```
+
+#### Get All Clients
+
+```http
+GET /api/clients
+Authorization: Bearer <your-jwt-token>
+```
+
+#### Get Client by ID
+
+```http
+GET /api/clients/:id
+Authorization: Bearer <your-jwt-token>
+```
+
+#### Update Client
+
+```http
+PUT /api/clients/:id
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+
+{
+  "name": "ACME Corporation Updated",
+  "email": "contact@acme.com",
+  "phone": "+1-555-0123",
+  "address": "456 Business Ave",
+  "city": "New York",
+  "postalCode": "10001",
+  "country": "USA",
+  "taxId": "12-3456789",
+  "notes": "Updated client information"
+}
+```
+
+#### Delete Client
+
+```http
+DELETE /api/clients/:id
+Authorization: Bearer <your-jwt-token>
+```
+
 ### Invoices
 
 #### Create Invoice
@@ -266,13 +339,7 @@ Content-Type: application/json
   "invoiceNumber": "INV-001",
   "invoiceDate": "2025-01-01",
   "dueDate": "2025-02-01",
-  "billTo": {
-    "name": "Client Company",
-    "address": "789 Client St",
-    "city": "Los Angeles",
-    "postalCode": "90210",
-    "country": "USA"
-  },
+  "clientId": 1,
   "billFromId": 1,
   "items": [
     {
@@ -292,6 +359,8 @@ Content-Type: application/json
   "taxRate": 8.5,
   "taxAmount": 341.28,
   "total": 4356.28,
+  "status": "pending",
+  "amountPaid": 0.00,
   "notes": "Payment due within 30 days"
 }
 ```
@@ -341,15 +410,20 @@ GET /health
 }
 ```
 
-### BillToAddress
+### Client
 
 ```typescript
 {
+  id: number;
   name: string;
-  address: string;
-  city: string;
-  postalCode: string;
-  country: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  country?: string;
+  taxId?: string;
+  notes?: string;
 }
 ```
 
@@ -371,14 +445,16 @@ GET /health
   invoiceNumber: string;
   invoiceDate: string; // ISO date format
   dueDate: string; // ISO date format
-  billTo: BillToAddress;
-  billFrom: BillFromAddress;
+  clientId: number;
+  billFromId: number;
   items: InvoiceItem[];
   subtotal: number;
   taxRate: number;
   taxAmount: number;
   total: number;
-  notes: string;
+  status: 'pending' | 'paid' | 'partially_paid' | 'overdue';
+  amountPaid: number;
+  notes?: string;
 }
 ```
 
@@ -386,6 +462,8 @@ GET /health
 
 ```typescript
 {
+  clientId: number;
+  invoiceId: number;
   method: string;
   accountName: string;
   accountNumber: string;
@@ -396,13 +474,37 @@ GET /health
 
 ## Database Schema
 
-The server automatically creates the following tables:
+The server automatically creates the following tables with their relationships:
 
-- `users` - User accounts and authentication
-- `bill_from_addresses` - Company billing addresses
-- `invoices` - Invoice records
-- `invoice_items` - Line items for invoices
-- `payment_details` - Payment method information
+### Tables
+
+- **`users`** - User accounts and authentication
+- **`bill_from_addresses`** - Company billing addresses (belongs to users)
+- **`clients`** - Client information (global, not user-specific)
+- **`invoices`** - Invoice records (belongs to users and clients)
+- **`invoice_items`** - Line items for invoices (belongs to invoices)
+- **`payment_details`** - Payment method information (belongs to clients and invoices)
+
+### Key Relationships
+
+- **Users** can have multiple **Bill From Addresses**
+- **Users** can create multiple **Invoices**
+- **Clients** are global entities (not tied to specific users)
+- **Invoices** belong to both a **User** (creator) and a **Client** (recipient)
+- **Invoices** can have multiple **Invoice Items**
+- **Payment Details** belong to both **Clients** and **Invoices**
+- **Invoices** include status tracking (pending, paid, partially_paid, overdue) and amount_paid
+
+### Invoice Status Management
+
+Invoices support the following statuses:
+
+- `pending` - Default status for new invoices
+- `paid` - Invoice has been fully paid
+- `partially_paid` - Invoice has been partially paid
+- `overdue` - Invoice is past due date
+
+Each invoice tracks the `amount_paid` separately from the total amount.
 
 ## Security Features
 

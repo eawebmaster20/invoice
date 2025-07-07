@@ -22,6 +22,19 @@
  */
 
 /**
+ * @typedef {Object} Client
+ * @property {string} name
+ * @property {string} email
+ * @property {string} phone
+ * @property {string} address
+ * @property {string} city
+ * @property {string} postalCode
+ * @property {string} country
+ * @property {string} taxId
+ * @property {string} notes
+ */
+
+/**
  * @typedef {Object} InvoiceItem
  * @property {string} description
  * @property {number} quantity
@@ -34,13 +47,16 @@
  * @property {string} invoiceNumber
  * @property {string} invoiceDate
  * @property {string} dueDate
- * @property {BillToAddress} billTo
+ * @property {number} clientId
+ * @property {Client} client
  * @property {BillFromAddress} billFrom
  * @property {InvoiceItem[]} items
  * @property {number} subtotal
  * @property {number} taxRate
  * @property {number} taxAmount
  * @property {number} total
+ * @property {string} status
+ * @property {number} amountPaid
  * @property {string} notes
  */
 

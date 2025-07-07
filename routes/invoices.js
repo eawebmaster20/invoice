@@ -1,7 +1,7 @@
 const express = require("express");
 const { pool } = require("../config/database");
 const { authenticateToken, validateRequest } = require("../middleware");
-const { invoiceSchema } = require("../validators/schemas");
+const { invoiceSchema, invoiceUpdateSchema } = require("../validators/schemas");
 
 const router = express.Router();
 
@@ -22,13 +22,15 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       invoiceNumber,
       invoiceDate,
       dueDate,
-      billTo,
+      clientId,
       billFromId,
       items,
       subtotal,
       taxRate,
       taxAmount,
       total,
+      status = "pending",
+      amountPaid = 0,
       notes,
     } = req.body;
 
@@ -43,6 +45,20 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       return res.status(409).json({
         error: "Invoice number already exists",
         message: "An invoice with this number already exists",
+      });
+    }
+
+    // Verify client exists
+    const [clients] = await connection.execute(
+      "SELECT id FROM clients WHERE id = ?",
+      [clientId]
+    );
+
+    if (clients.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: "Invalid client",
+        message: "The specified client does not exist",
       });
     }
 
@@ -65,26 +81,23 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
     const [invoiceResult] = await connection.execute(
       `
       INSERT INTO invoices (
-        user_id, invoice_number, invoice_date, due_date,
-        bill_to_name, bill_to_address, bill_to_city, bill_to_postal_code, bill_to_country,
-        bill_from_id, subtotal, tax_rate, tax_amount, total, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        user_id, client_id, invoice_number, invoice_date, due_date,
+        bill_from_id, subtotal, tax_rate, tax_amount, total, status, amount_paid, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         req.user.userId,
+        clientId,
         invoiceNumber,
         invoiceDate,
         dueDate,
-        billTo.name,
-        billTo.address,
-        billTo.city,
-        billTo.postalCode,
-        billTo.country,
         billFromId,
         subtotal,
         taxRate,
         taxAmount,
         total,
+        status,
+        amountPaid,
         notes || "",
       ]
     );
@@ -108,13 +121,15 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
         invoiceNumber,
         invoiceDate,
         dueDate,
-        billTo,
+        clientId,
         billFromId,
         items,
         subtotal,
         taxRate,
         taxAmount,
         total,
+        status,
+        amountPaid,
         notes,
       },
     });
@@ -140,6 +155,14 @@ router.get("/", async (req, res) => {
       `
       SELECT 
         i.*,
+        c.name as client_name,
+        c.email as client_email,
+        c.phone as client_phone,
+        c.address as client_address,
+        c.city as client_city,
+        c.postal_code as client_postal_code,
+        c.country as client_country,
+        c.tax_id as client_tax_id,
         bf.company_name as bill_from_company_name,
         bf.address as bill_from_address,
         bf.city as bill_from_city,
@@ -148,6 +171,7 @@ router.get("/", async (req, res) => {
         bf.email as bill_from_email,
         bf.phone as bill_from_phone
       FROM invoices i
+      LEFT JOIN clients c ON i.client_id = c.id
       LEFT JOIN bill_from_addresses bf ON i.bill_from_id = bf.id
       WHERE i.user_id = ?
       ORDER BY i.created_at DESC
@@ -170,12 +194,16 @@ router.get("/", async (req, res) => {
         invoiceNumber: invoice.invoice_number,
         invoiceDate: invoice.invoice_date,
         dueDate: invoice.due_date,
-        billTo: {
-          name: invoice.bill_to_name,
-          address: invoice.bill_to_address,
-          city: invoice.bill_to_city,
-          postalCode: invoice.bill_to_postal_code,
-          country: invoice.bill_to_country,
+        client: {
+          id: invoice.client_id,
+          name: invoice.client_name,
+          email: invoice.client_email,
+          phone: invoice.client_phone,
+          address: invoice.client_address,
+          city: invoice.client_city,
+          postalCode: invoice.client_postal_code,
+          country: invoice.client_country,
+          taxId: invoice.client_tax_id,
         },
         billFrom: {
           companyName: invoice.bill_from_company_name,
@@ -196,6 +224,8 @@ router.get("/", async (req, res) => {
         taxRate: parseFloat(invoice.tax_rate),
         taxAmount: parseFloat(invoice.tax_amount),
         total: parseFloat(invoice.total),
+        status: invoice.status,
+        amountPaid: parseFloat(invoice.amount_paid),
         notes: invoice.notes,
         createdAt: invoice.created_at,
         updatedAt: invoice.updated_at,
@@ -222,6 +252,14 @@ router.get("/:id", async (req, res) => {
       `
       SELECT 
         i.*,
+        c.name as client_name,
+        c.email as client_email,
+        c.phone as client_phone,
+        c.address as client_address,
+        c.city as client_city,
+        c.postal_code as client_postal_code,
+        c.country as client_country,
+        c.tax_id as client_tax_id,
         bf.company_name as bill_from_company_name,
         bf.address as bill_from_address,
         bf.city as bill_from_city,
@@ -230,6 +268,7 @@ router.get("/:id", async (req, res) => {
         bf.email as bill_from_email,
         bf.phone as bill_from_phone
       FROM invoices i
+      LEFT JOIN clients c ON i.client_id = c.id
       LEFT JOIN bill_from_addresses bf ON i.bill_from_id = bf.id
       WHERE i.id = ? AND i.user_id = ?
     `,
@@ -256,12 +295,16 @@ router.get("/:id", async (req, res) => {
         invoiceNumber: invoice.invoice_number,
         invoiceDate: invoice.invoice_date,
         dueDate: invoice.due_date,
-        billTo: {
-          name: invoice.bill_to_name,
-          address: invoice.bill_to_address,
-          city: invoice.bill_to_city,
-          postalCode: invoice.bill_to_postal_code,
-          country: invoice.bill_to_country,
+        client: {
+          id: invoice.client_id,
+          name: invoice.client_name,
+          email: invoice.client_email,
+          phone: invoice.client_phone,
+          address: invoice.client_address,
+          city: invoice.client_city,
+          postalCode: invoice.client_postal_code,
+          country: invoice.client_country,
+          taxId: invoice.client_tax_id,
         },
         billFrom: {
           companyName: invoice.bill_from_company_name,
@@ -282,6 +325,8 @@ router.get("/:id", async (req, res) => {
         taxRate: parseFloat(invoice.tax_rate),
         taxAmount: parseFloat(invoice.tax_amount),
         total: parseFloat(invoice.total),
+        status: invoice.status,
+        amountPaid: parseFloat(invoice.amount_paid),
         notes: invoice.notes,
         createdAt: invoice.created_at,
         updatedAt: invoice.updated_at,
@@ -326,5 +371,49 @@ router.delete("/:id", async (req, res) => {
     });
   }
 });
+
+/**
+ * PUT /api/invoices/:id/status
+ * Update invoice status and amount paid
+ */
+router.put(
+  "/:id/status",
+  validateRequest(invoiceUpdateSchema),
+  async (req, res) => {
+    try {
+      const invoiceId = req.params.id;
+      const { status, amountPaid, notes } = req.body;
+
+      const [result] = await pool.execute(
+        `UPDATE invoices 
+       SET status = ?, amount_paid = ?, notes = ?
+       WHERE id = ? AND user_id = ?`,
+        [status, amountPaid, notes || null, invoiceId, req.user.userId]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          error: "Invoice not found",
+        });
+      }
+
+      res.json({
+        message: "Invoice status updated successfully",
+        invoice: {
+          id: parseInt(invoiceId),
+          status,
+          amountPaid,
+          notes,
+        },
+      });
+    } catch (error) {
+      console.error("Invoice status update error:", error);
+      res.status(500).json({
+        error: "Failed to update invoice status",
+        message: error.message,
+      });
+    }
+  }
+);
 
 module.exports = router;
