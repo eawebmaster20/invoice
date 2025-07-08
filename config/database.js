@@ -1,24 +1,23 @@
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
 
-// Create Sequelize instance
-const sequelize = new Sequelize(
-  process.env.DB_NAME || "railway",
-  process.env.DB_USER || "root",
-  process.env.DB_PASSWORD || "",
-  {
-    host: process.env.DB_HOST || "localhost",
-    port: process.env.DB_PORT || 3306,
-    dialect: process.env.DB_DIALECT || "mysql",
-    logging: process.env.SEQUELIZE_LOGGING === "true" ? console.log : false,
-    pool: {
-      max: parseInt(process.env.DB_POOL_MAX) || 5,
-      min: parseInt(process.env.DB_POOL_MIN) || 0,
-      acquire: parseInt(process.env.DB_POOL_ACQUIRE) || 30000,
-      idle: parseInt(process.env.DB_POOL_IDLE) || 10000,
-    },
-  }
-);
+// Create Sequelize instance using DATABASE_URL for PostgreSQL
+const sequelize = new Sequelize(process.env.DB_URL, {
+  dialect: "postgres",
+  logging: process.env.SEQUELIZE_LOGGING === "true" ? console.log : false,
+  // dialectOptions: {
+  //   ssl: {
+  //     require: true,
+  //     rejectUnauthorized: false,
+  //   },
+  // },
+  pool: {
+    max: parseInt(process.env.DB_POOL_MAX) || 5,
+    min: parseInt(process.env.DB_POOL_MIN) || 0,
+    acquire: parseInt(process.env.DB_POOL_ACQUIRE) || 30000,
+    idle: parseInt(process.env.DB_POOL_IDLE) || 10000,
+  },
+});
 
 // Test database connection
 async function testConnection() {
@@ -67,6 +66,12 @@ async function initializeDatabase() {
   }
 }
 
+module.exports = {
+  sequelize,
+  testConnection,
+  initializeDatabase,
+  dropAllTables,
+};
 module.exports = {
   sequelize,
   testConnection,
