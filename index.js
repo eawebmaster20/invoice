@@ -193,11 +193,11 @@ function setupGracefulShutdown() {
 
 // Start the server only if this file is run directly (not required as a module)
 
-app.listen(PORT, () => {
-  console.log(`🚀 Invoice Server is running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-  console.log(`📚 API Documentation: http://localhost:${PORT}/`);
-});
-
+// app.listen(PORT, () => {
+//   console.log(`🚀 Invoice Server is running on port ${PORT}`);
+//   console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+//   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+//   console.log(`📚 API Documentation: http://localhost:${PORT}/`);
+// });
+startServer();
 module.exports = { app, startServer };
