@@ -1,5 +1,5 @@
 const express = require("express");
-const { pool } = require("../config/database");
+const db = require("../models");
 const { authenticateToken, validateRequest } = require("../middleware");
 const { billFromAddressSchema } = require("../validators/schemas");
 
@@ -17,35 +17,28 @@ router.post("/", validateRequest(billFromAddressSchema), async (req, res) => {
     const { companyName, address, city, postalCode, country, email, phone } =
       req.body;
 
-    const [result] = await pool.execute(
-      `
-      INSERT INTO bill_from_addresses (
-        user_id, company_name, address, city, postal_code, country, email, phone
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-      [
-        req.user.userId,
-        companyName,
-        address,
-        city,
-        postalCode,
-        country,
-        email,
-        phone,
-      ]
-    );
+    const billFromAddress = await db.BillFromAddress.create({
+      user_id: req.user.userId,
+      company_name: companyName,
+      address,
+      city,
+      postal_code: postalCode,
+      country,
+      email,
+      phone,
+    });
 
     res.status(201).json({
       message: "Bill from address created successfully",
       billFromAddress: {
-        id: result.insertId,
-        companyName,
-        address,
-        city,
-        postalCode,
-        country,
-        email,
-        phone,
+        id: billFromAddress.id,
+        companyName: billFromAddress.company_name,
+        address: billFromAddress.address,
+        city: billFromAddress.city,
+        postalCode: billFromAddress.postal_code,
+        country: billFromAddress.country,
+        email: billFromAddress.email,
+        phone: billFromAddress.phone,
       },
     });
   } catch (error) {
@@ -63,10 +56,10 @@ router.post("/", validateRequest(billFromAddressSchema), async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const [addresses] = await pool.execute(
-      "SELECT * FROM bill_from_addresses WHERE user_id = ? ORDER BY created_at DESC",
-      [req.user.userId]
-    );
+    const addresses = await db.BillFromAddress.findAll({
+      where: { user_id: req.user.userId },
+      order: [["created_at", "DESC"]],
+    });
 
     res.json({
       billFromAddresses: addresses.map((address) => ({
@@ -98,18 +91,15 @@ router.get("/:id", async (req, res) => {
   try {
     const addressId = req.params.id;
 
-    const [addresses] = await pool.execute(
-      "SELECT * FROM bill_from_addresses WHERE id = ? AND user_id = ?",
-      [addressId, req.user.userId]
-    );
+    const address = await db.BillFromAddress.findOne({
+      where: { id: addressId, user_id: req.user.userId },
+    });
 
-    if (addresses.length === 0) {
+    if (!address) {
       return res.status(404).json({
         error: "Bill from address not found",
       });
     }
-
-    const address = addresses[0];
 
     res.json({
       billFromAddress: {
@@ -143,27 +133,22 @@ router.put("/:id", validateRequest(billFromAddressSchema), async (req, res) => {
     const { companyName, address, city, postalCode, country, email, phone } =
       req.body;
 
-    const [result] = await pool.execute(
-      `
-      UPDATE bill_from_addresses 
-      SET company_name = ?, address = ?, city = ?, postal_code = ?, 
-          country = ?, email = ?, phone = ?
-      WHERE id = ? AND user_id = ?
-    `,
-      [
-        companyName,
+    const [updatedRows] = await db.BillFromAddress.update(
+      {
+        company_name: companyName,
         address,
         city,
-        postalCode,
+        postal_code: postalCode,
         country,
         email,
         phone,
-        addressId,
-        req.user.userId,
-      ]
+      },
+      {
+        where: { id: addressId, user_id: req.user.userId },
+      }
     );
 
-    if (result.affectedRows === 0) {
+    if (updatedRows === 0) {
       return res.status(404).json({
         error: "Bill from address not found",
       });
@@ -200,24 +185,22 @@ router.delete("/:id", async (req, res) => {
     const addressId = req.params.id;
 
     // Check if address is being used in any invoices
-    const [invoices] = await pool.execute(
-      "SELECT id FROM invoices WHERE bill_from_id = ? AND user_id = ?",
-      [addressId, req.user.userId]
-    );
+    const invoiceCount = await db.Invoice.count({
+      where: { bill_from_id: addressId, user_id: req.user.userId },
+    });
 
-    if (invoices.length > 0) {
+    if (invoiceCount > 0) {
       return res.status(400).json({
         error: "Cannot delete address",
         message: "This address is being used in existing invoices",
       });
     }
 
-    const [result] = await pool.execute(
-      "DELETE FROM bill_from_addresses WHERE id = ? AND user_id = ?",
-      [addressId, req.user.userId]
-    );
+    const deletedRows = await db.BillFromAddress.destroy({
+      where: { id: addressId, user_id: req.user.userId },
+    });
 
-    if (result.affectedRows === 0) {
+    if (deletedRows === 0) {
       return res.status(404).json({
         error: "Bill from address not found",
       });

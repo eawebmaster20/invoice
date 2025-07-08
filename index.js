@@ -6,6 +6,7 @@ require("dotenv").config();
 const { testConnection, initializeDatabase } = require("./config/database");
 const { errorHandler, notFound, isApiSecure } = require("./middleware");
 const { specs, swaggerUi } = require("./config/swagger");
+const db = require("./models");
 
 // Import routes
 const userRoutes = require("./routes/users");

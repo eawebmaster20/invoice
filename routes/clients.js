@@ -1,5 +1,5 @@
 const express = require("express");
-const { pool } = require("../config/database");
+const db = require("../models");
 const { authenticateToken, validateRequest } = require("../middleware");
 const { clientSchema } = require("../validators/schemas");
 
@@ -134,38 +134,31 @@ router.post("/", validateRequest(clientSchema), async (req, res) => {
       notes,
     } = req.body;
 
-    const [result] = await pool.execute(
-      `
-      INSERT INTO clients (
-        name, email, phone, address, city, postal_code, country, tax_id, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-      [
-        name,
-        email || null,
-        phone || null,
-        address || null,
-        city || null,
-        postalCode || null,
-        country || null,
-        taxId || null,
-        notes || null,
-      ]
-    );
+    const client = await db.Client.create({
+      name,
+      email: email || null,
+      phone: phone || null,
+      address: address || null,
+      city: city || null,
+      postal_code: postalCode || null,
+      country: country || null,
+      tax_id: taxId || null,
+      notes: notes || null,
+    });
 
     res.status(201).json({
       message: "Client created successfully",
       client: {
-        id: result.insertId,
-        name,
-        email,
-        phone,
-        address,
-        city,
-        postalCode,
-        country,
-        taxId,
-        notes,
+        id: client.id,
+        name: client.name,
+        email: client.email,
+        phone: client.phone,
+        address: client.address,
+        city: client.city,
+        postalCode: client.postal_code,
+        country: client.country,
+        taxId: client.tax_id,
+        notes: client.notes,
       },
     });
   } catch (error) {
@@ -183,9 +176,9 @@ router.post("/", validateRequest(clientSchema), async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const [clients] = await pool.execute(
-      "SELECT * FROM clients ORDER BY created_at DESC"
-    );
+    const clients = await db.Client.findAll({
+      order: [["created_at", "DESC"]],
+    });
 
     res.json({
       clients: clients.map((client) => ({
@@ -220,17 +213,13 @@ router.get("/:id", async (req, res) => {
   try {
     const clientId = req.params.id;
 
-    const [clients] = await pool.execute("SELECT * FROM clients WHERE id = ?", [
-      clientId,
-    ]);
+    const client = await db.Client.findByPk(clientId);
 
-    if (clients.length === 0) {
+    if (!client) {
       return res.status(404).json({
         error: "Client not found",
       });
     }
-
-    const client = clients[0];
 
     res.json({
       client: {
@@ -276,28 +265,24 @@ router.put("/:id", validateRequest(clientSchema), async (req, res) => {
       notes,
     } = req.body;
 
-    const [result] = await pool.execute(
-      `
-      UPDATE clients 
-      SET name = ?, email = ?, phone = ?, address = ?, city = ?, 
-          postal_code = ?, country = ?, tax_id = ?, notes = ?
-      WHERE id = ?
-    `,
-      [
+    const [updatedRows] = await db.Client.update(
+      {
         name,
-        email || null,
-        phone || null,
-        address || null,
-        city || null,
-        postalCode || null,
-        country || null,
-        taxId || null,
-        notes || null,
-        clientId,
-      ]
+        email: email || null,
+        phone: phone || null,
+        address: address || null,
+        city: city || null,
+        postal_code: postalCode || null,
+        country: country || null,
+        tax_id: taxId || null,
+        notes: notes || null,
+      },
+      {
+        where: { id: clientId },
+      }
     );
 
-    if (result.affectedRows === 0) {
+    if (updatedRows === 0) {
       return res.status(404).json({
         error: "Client not found",
       });
@@ -336,12 +321,11 @@ router.delete("/:id", async (req, res) => {
     const clientId = req.params.id;
 
     // Check if client has any invoices
-    const [invoices] = await pool.execute(
-      "SELECT id FROM invoices WHERE client_id = ?",
-      [clientId]
-    );
+    const invoiceCount = await db.Invoice.count({
+      where: { client_id: clientId },
+    });
 
-    if (invoices.length > 0) {
+    if (invoiceCount > 0) {
       return res.status(400).json({
         error: "Cannot delete client",
         message:
@@ -349,11 +333,11 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
-    const [result] = await pool.execute("DELETE FROM clients WHERE id = ?", [
-      clientId,
-    ]);
+    const deletedRows = await db.Client.destroy({
+      where: { id: clientId },
+    });
 
-    if (result.affectedRows === 0) {
+    if (deletedRows === 0) {
       return res.status(404).json({
         error: "Client not found",
       });
@@ -380,44 +364,35 @@ router.get("/:id/invoices", async (req, res) => {
     const clientId = req.params.id;
 
     // Verify client exists
-    const [clients] = await pool.execute(
-      "SELECT id FROM clients WHERE id = ?",
-      [clientId]
-    );
-
-    if (clients.length === 0) {
+    const client = await db.Client.findByPk(clientId);
+    if (!client) {
       return res.status(404).json({
         error: "Client not found",
       });
     }
 
-    const [invoices] = await pool.execute(
-      `
-      SELECT 
-        i.*,
-        bf.company_name as bill_from_company_name,
-        bf.address as bill_from_address,
-        bf.city as bill_from_city,
-        bf.postal_code as bill_from_postal_code,
-        bf.country as bill_from_country,
-        bf.email as bill_from_email,
-        bf.phone as bill_from_phone
-      FROM invoices i
-      LEFT JOIN bill_from_addresses bf ON i.bill_from_id = bf.id
-      WHERE i.client_id = ?
-      ORDER BY i.created_at DESC
-    `,
-      [clientId]
-    );
-
-    // Get items for each invoice
-    for (const invoice of invoices) {
-      const [items] = await pool.execute(
-        "SELECT description, quantity, unit_price, total FROM invoice_items WHERE invoice_id = ?",
-        [invoice.id]
-      );
-      invoice.items = items;
-    }
+    const invoices = await db.Invoice.findAll({
+      where: { client_id: clientId },
+      include: [
+        {
+          model: db.BillFromAddress,
+          attributes: [
+            "company_name",
+            "address",
+            "city",
+            "postal_code",
+            "country",
+            "email",
+            "phone",
+          ],
+        },
+        {
+          model: db.InvoiceItem,
+          attributes: ["description", "quantity", "unit_price", "total"],
+        },
+      ],
+      order: [["created_at", "DESC"]],
+    });
 
     res.json({
       invoices: invoices.map((invoice) => ({
@@ -425,16 +400,18 @@ router.get("/:id/invoices", async (req, res) => {
         invoiceNumber: invoice.invoice_number,
         invoiceDate: invoice.invoice_date,
         dueDate: invoice.due_date,
-        billFrom: {
-          companyName: invoice.bill_from_company_name,
-          address: invoice.bill_from_address,
-          city: invoice.bill_from_city,
-          postalCode: invoice.bill_from_postal_code,
-          country: invoice.bill_from_country,
-          email: invoice.bill_from_email,
-          phone: invoice.bill_from_phone,
-        },
-        items: invoice.items.map((item) => ({
+        billFrom: invoice.BillFromAddress
+          ? {
+              companyName: invoice.BillFromAddress.company_name,
+              address: invoice.BillFromAddress.address,
+              city: invoice.BillFromAddress.city,
+              postalCode: invoice.BillFromAddress.postal_code,
+              country: invoice.BillFromAddress.country,
+              email: invoice.BillFromAddress.email,
+              phone: invoice.BillFromAddress.phone,
+            }
+          : null,
+        items: invoice.InvoiceItems.map((item) => ({
           description: item.description,
           quantity: item.quantity,
           unitPrice: parseFloat(item.unit_price),

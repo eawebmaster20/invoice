@@ -1,5 +1,5 @@
 const express = require("express");
-const { pool } = require("../config/database");
+const db = require("../models");
 const { authenticateToken, validateRequest } = require("../middleware");
 const { paymentDetailsSchema } = require("../validators/schemas");
 
@@ -26,12 +26,8 @@ router.post("/", validateRequest(paymentDetailsSchema), async (req, res) => {
     } = req.body;
 
     // Verify client exists
-    const [clients] = await pool.execute(
-      "SELECT id FROM clients WHERE id = ?",
-      [clientId]
-    );
-
-    if (clients.length === 0) {
+    const client = await db.Client.findByPk(clientId);
+    if (!client) {
       return res.status(400).json({
         error: "Invalid client",
         message: "The specified client does not exist",
@@ -40,12 +36,11 @@ router.post("/", validateRequest(paymentDetailsSchema), async (req, res) => {
 
     // If invoiceId is provided, verify it exists and belongs to the client
     if (invoiceId) {
-      const [invoices] = await pool.execute(
-        "SELECT id FROM invoices WHERE id = ? AND client_id = ?",
-        [invoiceId, clientId]
-      );
+      const invoice = await db.Invoice.findOne({
+        where: { id: invoiceId, client_id: clientId },
+      });
 
-      if (invoices.length === 0) {
+      if (!invoice) {
         return res.status(400).json({
           error: "Invalid invoice",
           message:
@@ -56,34 +51,27 @@ router.post("/", validateRequest(paymentDetailsSchema), async (req, res) => {
 
     // If this is being set as default for the client, unset other defaults
     if (isDefault) {
-      await pool.execute(
-        "UPDATE payment_details SET is_default = FALSE WHERE client_id = ?",
-        [clientId]
+      await db.PaymentDetail.update(
+        { is_default: false },
+        { where: { client_id: clientId } }
       );
     }
 
-    const [result] = await pool.execute(
-      `
-      INSERT INTO payment_details (
-        client_id, invoice_id, method, account_name, account_number, bank_name, swift_code, is_default
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-      [
-        clientId,
-        invoiceId || null,
-        method,
-        accountName,
-        accountNumber,
-        bankName,
-        swiftCode,
-        isDefault,
-      ]
-    );
+    const paymentDetail = await db.PaymentDetail.create({
+      client_id: clientId,
+      invoice_id: invoiceId || null,
+      method,
+      account_name: accountName,
+      account_number: accountNumber,
+      bank_name: bankName,
+      swift_code: swiftCode,
+      is_default: isDefault,
+    });
 
     res.status(201).json({
       message: "Payment details created successfully",
       paymentDetails: {
-        id: result.insertId,
+        id: paymentDetail.id,
         clientId,
         invoiceId,
         method,
@@ -112,21 +100,20 @@ router.get("/client/:clientId", async (req, res) => {
     const clientId = req.params.clientId;
 
     // Verify client exists
-    const [clients] = await pool.execute(
-      "SELECT id FROM clients WHERE id = ?",
-      [clientId]
-    );
-
-    if (clients.length === 0) {
+    const client = await db.Client.findByPk(clientId);
+    if (!client) {
       return res.status(404).json({
         error: "Client not found",
       });
     }
 
-    const [paymentDetails] = await pool.execute(
-      "SELECT * FROM payment_details WHERE client_id = ? ORDER BY is_default DESC, created_at DESC",
-      [clientId]
-    );
+    const paymentDetails = await db.PaymentDetail.findAll({
+      where: { client_id: clientId },
+      order: [
+        ["is_default", "DESC"],
+        ["created_at", "DESC"],
+      ],
+    });
 
     res.json({
       paymentDetails: paymentDetails.map((payment) => ({
@@ -157,21 +144,27 @@ router.get("/client/:clientId", async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const [paymentDetails] = await pool.execute(
-      `SELECT pd.*, c.name as client_name, i.invoice_number 
-       FROM payment_details pd 
-       LEFT JOIN clients c ON pd.client_id = c.id 
-       LEFT JOIN invoices i ON pd.invoice_id = i.id 
-       ORDER BY pd.created_at DESC`
-    );
+    const paymentDetails = await db.PaymentDetail.findAll({
+      include: [
+        {
+          model: db.Client,
+          attributes: ["name"],
+        },
+        {
+          model: db.Invoice,
+          attributes: ["invoice_number"],
+        },
+      ],
+      order: [["created_at", "DESC"]],
+    });
 
     res.json({
       paymentDetails: paymentDetails.map((payment) => ({
         id: payment.id,
         clientId: payment.client_id,
-        clientName: payment.client_name,
+        clientName: payment.Client ? payment.Client.name : null,
         invoiceId: payment.invoice_id,
-        invoiceNumber: payment.invoice_number,
+        invoiceNumber: payment.Invoice ? payment.Invoice.invoice_number : null,
         method: payment.method,
         accountName: payment.account_name,
         accountNumber: payment.account_number,
@@ -198,37 +191,41 @@ router.get("/:id", async (req, res) => {
   try {
     const paymentId = req.params.id;
 
-    const [paymentDetails] = await pool.execute(
-      `SELECT pd.*, c.name as client_name, i.invoice_number 
-       FROM payment_details pd 
-       LEFT JOIN clients c ON pd.client_id = c.id 
-       LEFT JOIN invoices i ON pd.invoice_id = i.id 
-       WHERE pd.id = ?`,
-      [paymentId]
-    );
+    const paymentDetail = await db.PaymentDetail.findByPk(paymentId, {
+      include: [
+        {
+          model: db.Client,
+          attributes: ["name"],
+        },
+        {
+          model: db.Invoice,
+          attributes: ["invoice_number"],
+        },
+      ],
+    });
 
-    if (paymentDetails.length === 0) {
+    if (!paymentDetail) {
       return res.status(404).json({
         error: "Payment details not found",
       });
     }
 
-    const payment = paymentDetails[0];
-
     res.json({
       paymentDetails: {
-        id: payment.id,
-        clientId: payment.client_id,
-        clientName: payment.client_name,
-        invoiceId: payment.invoice_id,
-        invoiceNumber: payment.invoice_number,
-        method: payment.method,
-        accountName: payment.account_name,
-        accountNumber: payment.account_number,
-        bankName: payment.bank_name,
-        swiftCode: payment.swift_code,
-        isDefault: Boolean(payment.is_default),
-        createdAt: payment.created_at,
+        id: paymentDetail.id,
+        clientId: paymentDetail.client_id,
+        clientName: paymentDetail.Client ? paymentDetail.Client.name : null,
+        invoiceId: paymentDetail.invoice_id,
+        invoiceNumber: paymentDetail.Invoice
+          ? paymentDetail.Invoice.invoice_number
+          : null,
+        method: paymentDetail.method,
+        accountName: paymentDetail.account_name,
+        accountNumber: paymentDetail.account_number,
+        bankName: paymentDetail.bank_name,
+        swiftCode: paymentDetail.swift_code,
+        isDefault: Boolean(paymentDetail.is_default),
+        createdAt: paymentDetail.created_at,
       },
     });
   } catch (error) {
@@ -259,12 +256,8 @@ router.put("/:id", validateRequest(paymentDetailsSchema), async (req, res) => {
     } = req.body;
 
     // Verify client exists
-    const [clients] = await pool.execute(
-      "SELECT id FROM clients WHERE id = ?",
-      [clientId]
-    );
-
-    if (clients.length === 0) {
+    const client = await db.Client.findByPk(clientId);
+    if (!client) {
       return res.status(400).json({
         error: "Invalid client",
         message: "The specified client does not exist",
@@ -273,12 +266,11 @@ router.put("/:id", validateRequest(paymentDetailsSchema), async (req, res) => {
 
     // If invoiceId is provided, verify it exists and belongs to the client
     if (invoiceId) {
-      const [invoices] = await pool.execute(
-        "SELECT id FROM invoices WHERE id = ? AND client_id = ?",
-        [invoiceId, clientId]
-      );
+      const invoice = await db.Invoice.findOne({
+        where: { id: invoiceId, client_id: clientId },
+      });
 
-      if (invoices.length === 0) {
+      if (!invoice) {
         return res.status(400).json({
           error: "Invalid invoice",
           message:
@@ -289,33 +281,32 @@ router.put("/:id", validateRequest(paymentDetailsSchema), async (req, res) => {
 
     // If this is being set as default for the client, unset other defaults
     if (isDefault) {
-      await pool.execute(
-        "UPDATE payment_details SET is_default = FALSE WHERE client_id = ? AND id != ?",
-        [clientId, paymentId]
+      await db.PaymentDetail.update(
+        { is_default: false },
+        {
+          where: {
+            client_id: clientId,
+            id: { [db.Sequelize.Op.ne]: paymentId },
+          },
+        }
       );
     }
 
-    const [result] = await pool.execute(
-      `
-      UPDATE payment_details 
-      SET client_id = ?, invoice_id = ?, method = ?, account_name = ?, account_number = ?, 
-          bank_name = ?, swift_code = ?, is_default = ?
-      WHERE id = ?
-    `,
-      [
-        clientId,
-        invoiceId || null,
+    const [updatedRows] = await db.PaymentDetail.update(
+      {
+        client_id: clientId,
+        invoice_id: invoiceId || null,
         method,
-        accountName,
-        accountNumber,
-        bankName,
-        swiftCode,
-        isDefault,
-        paymentId,
-      ]
+        account_name: accountName,
+        account_number: accountNumber,
+        bank_name: bankName,
+        swift_code: swiftCode,
+        is_default: isDefault,
+      },
+      { where: { id: paymentId } }
     );
 
-    if (result.affectedRows === 0) {
+    if (updatedRows === 0) {
       return res.status(404).json({
         error: "Payment details not found",
       });
@@ -352,12 +343,11 @@ router.delete("/:id", async (req, res) => {
   try {
     const paymentId = req.params.id;
 
-    const [result] = await pool.execute(
-      "DELETE FROM payment_details WHERE id = ?",
-      [paymentId]
-    );
+    const deletedRows = await db.PaymentDetail.destroy({
+      where: { id: paymentId },
+    });
 
-    if (result.affectedRows === 0) {
+    if (deletedRows === 0) {
       return res.status(404).json({
         error: "Payment details not found",
       });

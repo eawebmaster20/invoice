@@ -1,5 +1,5 @@
 const express = require("express");
-const { pool } = require("../config/database");
+const db = require("../models");
 const {
   hashPassword,
   comparePassword,
@@ -120,12 +120,13 @@ router.post(
       const { username, email, password } = req.body;
 
       // Check if user already exists
-      const [existingUsers] = await pool.execute(
-        "SELECT id FROM users WHERE email = ? OR username = ?",
-        [email, username]
-      );
+      const existingUser = await db.User.findOne({
+        where: {
+          [db.Sequelize.Op.or]: [{ email }, { username }],
+        },
+      });
 
-      if (existingUsers.length > 0) {
+      if (existingUser) {
         return res.status(409).json({
           error: "User already exists",
           message: "A user with this email or username already exists",
@@ -136,24 +137,25 @@ router.post(
       const passwordHash = await hashPassword(password);
 
       // Create user
-      const [result] = await pool.execute(
-        "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-        [username, email, passwordHash]
-      );
+      const user = await db.User.create({
+        username,
+        email,
+        password_hash: passwordHash,
+      });
 
       // Generate token
       const token = generateToken({
-        userId: result.insertId,
-        username,
-        email,
+        userId: user.id,
+        username: user.username,
+        email: user.email,
       });
 
       res.status(201).json({
         message: "User registered successfully",
         user: {
-          id: result.insertId,
-          username,
-          email,
+          id: user.id,
+          username: user.username,
+          email: user.email,
         },
         token,
       });
@@ -217,19 +219,16 @@ router.post("/login", validateRequest(userLoginSchema), async (req, res) => {
     const { email, password } = req.body;
 
     // Find user
-    const [users] = await pool.execute(
-      "SELECT id, username, email, password_hash FROM users WHERE email = ?",
-      [email]
-    );
+    const user = await db.User.findOne({
+      where: { email },
+    });
 
-    if (users.length === 0) {
+    if (!user) {
       return res.status(401).json({
         error: "Authentication failed",
         message: "Invalid email or password",
       });
     }
-
-    const user = users[0];
 
     // Compare password
     const isPasswordValid = await comparePassword(password, user.password_hash);
@@ -312,19 +311,23 @@ router.get(
   require("../middleware").authenticateToken,
   async (req, res) => {
     try {
-      const [users] = await pool.execute(
-        "SELECT id, username, email, created_at FROM users WHERE id = ?",
-        [req.user.userId]
-      );
+      const user = await db.User.findByPk(req.user.userId, {
+        attributes: ["id", "username", "email", "created_at"],
+      });
 
-      if (users.length === 0) {
+      if (!user) {
         return res.status(404).json({
           error: "User not found",
         });
       }
 
       res.json({
-        user: users[0],
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          created_at: user.created_at,
+        },
       });
     } catch (error) {
       console.error("Profile fetch error:", error);
