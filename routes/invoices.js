@@ -31,8 +31,10 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       amountPaid = 0,
       notes,
     } = req.body;
+    const payload = req.body;
 
     console.log("Creating invoice with clientId:", clientId);
+    console.log({ payload });
 
     // If invoiceNumber is provided, check for duplicates
     if (invoiceNumber) {
