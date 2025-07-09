@@ -79,12 +79,12 @@ module.exports = (sequelize, DataTypes) => {
       createdAt: "created_at",
       updatedAt: "updated_at",
       hooks: {
-        beforeCreate: async (invoice, options) => {
-          try {
-            console.log("beforeCreate hook triggered for invoice");
-            console.log("Current invoice_number:", invoice.invoice_number);
+        beforeValidate: async (invoice, options) => {
+          console.log("beforeValidate hook triggered");
+          console.log("Current invoice_number:", invoice.invoice_number);
 
-            if (!invoice.invoice_number) {
+          if (!invoice.invoice_number) {
+            try {
               console.log("Generating invoice number...");
 
               // Generate invoice number with pattern: INV-YYYY-MM-NNNN
@@ -96,7 +96,7 @@ module.exports = (sequelize, DataTypes) => {
               console.log("Using prefix:", prefix);
 
               // Find the last invoice number for this month and year
-              const lastInvoice = await Invoice.findOne({
+              const lastInvoice = await sequelize.models.Invoice.findOne({
                 where: {
                   invoice_number: {
                     [sequelize.Sequelize.Op.like]: `${prefix}%`,
@@ -126,13 +126,14 @@ module.exports = (sequelize, DataTypes) => {
               invoice.invoice_number = generatedNumber;
 
               console.log("Invoice number set to:", invoice.invoice_number);
+            } catch (error) {
+              console.error("Error in beforeValidate hook:", error);
+              // Generate a simple fallback number
+              const timestamp = Date.now();
+              const fallbackNumber = `INV-${timestamp}`;
+              invoice.invoice_number = fallbackNumber;
+              console.log("Fallback invoice number:", fallbackNumber);
             }
-          } catch (error) {
-            console.error("Error in beforeCreate hook:", error);
-            // Generate a simple fallback number
-            const timestamp = Date.now();
-            invoice.invoice_number = `INV-${timestamp}`;
-            console.log("Fallback invoice number:", invoice.invoice_number);
           }
         },
       },

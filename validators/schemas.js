@@ -55,6 +55,7 @@ const invoiceItemSchema = Joi.object({
 
 // Invoice validation schema
 const invoiceSchema = Joi.object({
+  invoiceNumber: Joi.string().optional(), // Made optional since it's auto-generated
   invoiceDate: Joi.date().iso().required(),
   dueDate: Joi.date().iso().min(Joi.ref("invoiceDate")).required(),
   clientId: Joi.number().integer().positive().required(),
