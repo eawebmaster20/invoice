@@ -21,7 +21,7 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       invoiceDate,
       dueDate,
       clientId,
-      billFromId,
+      billFromId, // Now optional
       items,
       subtotal,
       taxRate,
@@ -32,7 +32,6 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       notes,
     } = req.body;
 
-    // Remove the duplicate invoice number check since it's auto-generated
     // If invoiceNumber is provided, check for duplicates
     if (invoiceNumber) {
       const existingInvoice = await db.Invoice.findOne({
@@ -49,8 +48,8 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       }
     }
 
-    // Verify client exists
-    const client = await db.Client.findByPk(clientId, { transaction });
+    // Verify client exists (remove transaction from this query since client was created outside transaction)
+    const client = await db.Client.findByPk(clientId);
     if (!client) {
       await transaction.rollback();
       return res.status(400).json({
@@ -59,19 +58,21 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       });
     }
 
-    // Verify bill_from_id belongs to the user
-    const billFromAddress = await db.BillFromAddress.findOne({
-      where: { id: billFromId, user_id: req.user.userId },
-      transaction,
-    });
-
-    if (!billFromAddress) {
-      await transaction.rollback();
-      return res.status(400).json({
-        error: "Invalid bill from address",
-        message:
-          "The specified bill from address does not exist or does not belong to you",
+    // Verify bill_from_id belongs to the user (only if provided)
+    if (billFromId) {
+      const billFromAddress = await db.BillFromAddress.findOne({
+        where: { id: billFromId, user_id: req.user.userId },
+        transaction,
       });
+
+      if (!billFromAddress) {
+        await transaction.rollback();
+        return res.status(400).json({
+          error: "Invalid bill from address",
+          message:
+            "The specified bill from address does not exist or does not belong to you",
+        });
+      }
     }
 
     // Create invoice (invoice_number will be auto-generated if not provided)
@@ -82,7 +83,7 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
         invoice_number: invoiceNumber, // Will be auto-generated if undefined
         invoice_date: invoiceDate,
         due_date: dueDate,
-        bill_from_id: billFromId,
+        bill_from_id: billFromId || null, // Can be null
         subtotal,
         tax_rate: taxRate,
         tax_amount: taxAmount,
@@ -412,4 +413,5 @@ router.put(
   }
 );
 
+module.exports = router;
 module.exports = router;

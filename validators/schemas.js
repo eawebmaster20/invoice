@@ -59,7 +59,7 @@ const invoiceSchema = Joi.object({
   invoiceDate: Joi.date().iso().required(),
   dueDate: Joi.date().iso().min(Joi.ref("invoiceDate")).required(),
   clientId: Joi.number().integer().positive().required(),
-  billFromId: Joi.number().integer().positive().required(),
+  billFromId: Joi.number().integer().positive().optional(), // Made optional
   items: Joi.array().items(invoiceItemSchema).min(1).required(),
   subtotal: Joi.number().positive().required(),
   taxRate: Joi.number().min(0).max(100).required(),
