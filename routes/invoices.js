@@ -12,7 +12,7 @@ router.use(authenticateToken);
  * POST /api/invoices
  * Create a new invoice
  */
-router.post("/", validateRequest(invoiceSchema), async (req, res) => {
+router.post("/", async (req, res) => {
   // const transaction = await db.sequelize.transaction();
 
   try {
