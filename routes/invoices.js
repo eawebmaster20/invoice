@@ -164,6 +164,7 @@ router.get("/", async (req, res) => {
         },
         {
           model: db.BillFromAddress,
+          required: false, // Allow null associations
           attributes: [
             "company_name",
             "address",
@@ -199,15 +200,17 @@ router.get("/", async (req, res) => {
           country: invoice.Client.country,
           taxId: invoice.Client.tax_id,
         },
-        billFrom: {
-          companyName: invoice.BillFromAddress.company_name,
-          address: invoice.BillFromAddress.address,
-          city: invoice.BillFromAddress.city,
-          postalCode: invoice.BillFromAddress.postal_code,
-          country: invoice.BillFromAddress.country,
-          email: invoice.BillFromAddress.email,
-          phone: invoice.BillFromAddress.phone,
-        },
+        billFrom: invoice.BillFromAddress
+          ? {
+              companyName: invoice.BillFromAddress.company_name,
+              address: invoice.BillFromAddress.address,
+              city: invoice.BillFromAddress.city,
+              postalCode: invoice.BillFromAddress.postal_code,
+              country: invoice.BillFromAddress.country,
+              email: invoice.BillFromAddress.email,
+              phone: invoice.BillFromAddress.phone,
+            }
+          : null,
         items: invoice.InvoiceItems.map((item) => ({
           description: item.description,
           quantity: item.quantity,
@@ -260,6 +263,7 @@ router.get("/:id", async (req, res) => {
         },
         {
           model: db.BillFromAddress,
+          required: false, // Allow null associations
           attributes: [
             "company_name",
             "address",
@@ -300,15 +304,17 @@ router.get("/:id", async (req, res) => {
           country: invoice.Client.country,
           taxId: invoice.Client.tax_id,
         },
-        billFrom: {
-          companyName: invoice.BillFromAddress.company_name,
-          address: invoice.BillFromAddress.address,
-          city: invoice.BillFromAddress.city,
-          postalCode: invoice.BillFromAddress.postal_code,
-          country: invoice.BillFromAddress.country,
-          email: invoice.BillFromAddress.email,
-          phone: invoice.BillFromAddress.phone,
-        },
+        billFrom: invoice.BillFromAddress
+          ? {
+              companyName: invoice.BillFromAddress.company_name,
+              address: invoice.BillFromAddress.address,
+              city: invoice.BillFromAddress.city,
+              postalCode: invoice.BillFromAddress.postal_code,
+              country: invoice.BillFromAddress.country,
+              email: invoice.BillFromAddress.email,
+              phone: invoice.BillFromAddress.phone,
+            }
+          : null,
         items: invoice.InvoiceItems.map((item) => ({
           description: item.description,
           quantity: item.quantity,
@@ -413,5 +419,4 @@ router.put(
   }
 );
 
-module.exports = router;
 module.exports = router;
