@@ -48,14 +48,14 @@ app.use(
 );
 
 // Request logging middleware (after body parsing)
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  console.log("Content-Type:", req.get("Content-Type"));
-  console.log("Body type:", typeof req.body);
-  console.log("Body:", req.body);
-  console.log("Raw body:", req.rawBody);
-  next();
-});
+// app.use((req, res, next) => {
+//   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+//   console.log("Content-Type:", req.get("Content-Type"));
+//   console.log("Body type:", typeof req.body);
+//   console.log("Body:", req.body);
+//   console.log("Raw body:", req.rawBody);
+//   next();
+// });
 
 // Swagger Documentation
 app.use(
