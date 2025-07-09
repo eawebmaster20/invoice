@@ -17,7 +17,7 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
 
   try {
     const {
-      invoiceNumber,
+      invoiceNumber, // This is now optional
       invoiceDate,
       dueDate,
       clientId,
@@ -32,18 +32,21 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       notes,
     } = req.body;
 
-    // Check if invoice number already exists for this user
-    const existingInvoice = await db.Invoice.findOne({
-      where: { invoice_number: invoiceNumber, user_id: req.user.userId },
-      transaction,
-    });
-
-    if (existingInvoice) {
-      await transaction.rollback();
-      return res.status(409).json({
-        error: "Invoice number already exists",
-        message: "An invoice with this number already exists",
+    // Remove the duplicate invoice number check since it's auto-generated
+    // If invoiceNumber is provided, check for duplicates
+    if (invoiceNumber) {
+      const existingInvoice = await db.Invoice.findOne({
+        where: { invoice_number: invoiceNumber, user_id: req.user.userId },
+        transaction,
       });
+
+      if (existingInvoice) {
+        await transaction.rollback();
+        return res.status(409).json({
+          error: "Invoice number already exists",
+          message: "An invoice with this number already exists",
+        });
+      }
     }
 
     // Verify client exists
@@ -71,12 +74,12 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       });
     }
 
-    // Create invoice
+    // Create invoice (invoice_number will be auto-generated if not provided)
     const invoice = await db.Invoice.create(
       {
         user_id: req.user.userId,
         client_id: clientId,
-        invoice_number: invoiceNumber,
+        invoice_number: invoiceNumber, // Will be auto-generated if undefined
         invoice_date: invoiceDate,
         due_date: dueDate,
         bill_from_id: billFromId,
@@ -111,7 +114,7 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       message: "Invoice created successfully",
       invoice: {
         id: invoice.id,
-        invoiceNumber,
+        invoiceNumber: invoice.invoice_number, // Return the auto-generated number
         invoiceDate,
         dueDate,
         clientId,
