@@ -5,17 +5,24 @@ require("dotenv").config();
 const sequelize = new Sequelize(process.env.DB_URL, {
   dialect: "postgres",
   logging: process.env.SEQUELIZE_LOGGING === "true" ? console.log : false,
-  // dialectOptions: {
-  //   ssl: {
-  //     require: true,
-  //     rejectUnauthorized: false,
-  //   },
-  // },
+  dialectOptions: {
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? {
+            require: true,
+            rejectUnauthorized: false,
+          }
+        : false,
+  },
   pool: {
     max: parseInt(process.env.DB_POOL_MAX) || 5,
     min: parseInt(process.env.DB_POOL_MIN) || 0,
     acquire: parseInt(process.env.DB_POOL_ACQUIRE) || 30000,
     idle: parseInt(process.env.DB_POOL_IDLE) || 10000,
+  },
+  define: {
+    timestamps: true,
+    underscored: false,
   },
 });
 
@@ -31,11 +38,33 @@ async function testConnection() {
   }
 }
 
-// Drop all tables
+// Drop all tables safely
 async function dropAllTables() {
   try {
     console.log("Dropping all tables...");
-    await sequelize.drop();
+
+    // Drop tables in correct order to avoid foreign key constraints
+    const queryInterface = sequelize.getQueryInterface();
+
+    // Disable foreign key checks
+    if (sequelize.getDialect() === "postgres") {
+      await sequelize.query("SET session_replication_role = replica;");
+    }
+
+    // Get all table names
+    const tables = await queryInterface.showAllTables();
+
+    // Drop each table
+    for (const tableName of tables) {
+      await queryInterface.dropTable(tableName, { cascade: true });
+      console.log(`Dropped table: ${tableName}`);
+    }
+
+    // Re-enable foreign key checks
+    if (sequelize.getDialect() === "postgres") {
+      await sequelize.query("SET session_replication_role = DEFAULT;");
+    }
+
     console.log("All tables dropped successfully");
   } catch (error) {
     console.error("Error dropping tables:", error.message);
@@ -66,12 +95,6 @@ async function initializeDatabase() {
   }
 }
 
-module.exports = {
-  sequelize,
-  testConnection,
-  initializeDatabase,
-  dropAllTables,
-};
 module.exports = {
   sequelize,
   testConnection,
