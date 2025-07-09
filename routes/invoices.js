@@ -33,6 +33,7 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
     } = req.body;
 
     console.log("Creating invoice with clientId:", clientId);
+    console.log("Invoice number from request:", invoiceNumber);
 
     // If invoiceNumber is provided, check for duplicates
     if (invoiceNumber) {
@@ -85,24 +86,29 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
     }
 
     // Create invoice (invoice_number will be auto-generated if not provided)
-    const invoice = await db.Invoice.create(
-      {
-        user_id: req.user.userId,
-        client_id: clientId,
-        invoice_number: invoiceNumber, // Will be auto-generated if undefined
-        invoice_date: invoiceDate,
-        due_date: dueDate,
-        bill_from_id: billFromId || null, // Can be null
-        subtotal,
-        tax_rate: taxRate,
-        tax_amount: taxAmount,
-        total,
-        status,
-        amount_paid: amountPaid,
-        notes: notes || "",
-      },
-      { transaction }
-    );
+    const invoiceData = {
+      user_id: req.user.userId,
+      client_id: clientId,
+      invoice_date: invoiceDate,
+      due_date: dueDate,
+      bill_from_id: billFromId || null,
+      subtotal,
+      tax_rate: taxRate,
+      tax_amount: taxAmount,
+      total,
+      status,
+      amount_paid: amountPaid,
+      notes: notes || "",
+    };
+
+    // Only include invoice_number if it's provided and not empty
+    if (invoiceNumber && invoiceNumber.trim() !== "") {
+      invoiceData.invoice_number = invoiceNumber;
+    }
+
+    console.log("Invoice data being created:", invoiceData);
+
+    const invoice = await db.Invoice.create(invoiceData, { transaction });
 
     // Create invoice items
     for (const item of items) {

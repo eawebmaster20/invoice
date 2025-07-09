@@ -80,34 +80,59 @@ module.exports = (sequelize, DataTypes) => {
       updatedAt: "updated_at",
       hooks: {
         beforeCreate: async (invoice, options) => {
-          if (!invoice.invoice_number) {
-            // Generate invoice number with pattern: INV-YYYY-MM-NNNN
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const prefix = `INV-${year}-${month}-`;
+          try {
+            console.log("beforeCreate hook triggered for invoice");
+            console.log("Current invoice_number:", invoice.invoice_number);
 
-            // Find the last invoice number for this month and year
-            const lastInvoice = await sequelize.models.Invoice.findOne({
-              where: {
-                invoice_number: {
-                  [sequelize.Sequelize.Op.like]: `${prefix}%`,
+            if (!invoice.invoice_number) {
+              console.log("Generating invoice number...");
+
+              // Generate invoice number with pattern: INV-YYYY-MM-NNNN
+              const now = new Date();
+              const year = now.getFullYear();
+              const month = String(now.getMonth() + 1).padStart(2, "0");
+              const prefix = `INV-${year}-${month}-`;
+
+              console.log("Using prefix:", prefix);
+
+              // Find the last invoice number for this month and year
+              const lastInvoice = await Invoice.findOne({
+                where: {
+                  invoice_number: {
+                    [sequelize.Sequelize.Op.like]: `${prefix}%`,
+                  },
                 },
-              },
-              order: [["invoice_number", "DESC"]],
-              transaction: options.transaction,
-            });
+                order: [["invoice_number", "DESC"]],
+                transaction: options.transaction,
+              });
 
-            let nextNumber = 1;
-            if (lastInvoice) {
-              // Extract the number part and increment
-              const lastNumber = lastInvoice.invoice_number.split("-").pop();
-              nextNumber = parseInt(lastNumber) + 1;
+              console.log(
+                "Last invoice found:",
+                lastInvoice ? lastInvoice.invoice_number : "none"
+              );
+
+              let nextNumber = 1;
+              if (lastInvoice) {
+                // Extract the number part and increment
+                const lastNumber = lastInvoice.invoice_number.split("-").pop();
+                nextNumber = parseInt(lastNumber) + 1;
+              }
+
+              // Pad with zeros to make it 4 digits
+              const paddedNumber = String(nextNumber).padStart(4, "0");
+              const generatedNumber = `${prefix}${paddedNumber}`;
+
+              console.log("Generated invoice number:", generatedNumber);
+              invoice.invoice_number = generatedNumber;
+
+              console.log("Invoice number set to:", invoice.invoice_number);
             }
-
-            // Pad with zeros to make it 4 digits
-            const paddedNumber = String(nextNumber).padStart(4, "0");
-            invoice.invoice_number = `${prefix}${paddedNumber}`;
+          } catch (error) {
+            console.error("Error in beforeCreate hook:", error);
+            // Generate a simple fallback number
+            const timestamp = Date.now();
+            invoice.invoice_number = `INV-${timestamp}`;
+            console.log("Fallback invoice number:", invoice.invoice_number);
           }
         },
       },
