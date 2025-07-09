@@ -13,7 +13,7 @@ router.use(authenticateToken);
  * Create a new invoice
  */
 router.post("/", validateRequest(invoiceSchema), async (req, res) => {
-  const transaction = await db.sequelize.transaction();
+  // const transaction = await db.sequelize.transaction();
 
   try {
     const {
@@ -32,15 +32,17 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       notes,
     } = req.body;
 
+    console.log("Creating invoice with clientId:", clientId);
+
     // If invoiceNumber is provided, check for duplicates
     if (invoiceNumber) {
       const existingInvoice = await db.Invoice.findOne({
         where: { invoice_number: invoiceNumber, user_id: req.user.userId },
-        transaction,
+        // transaction,
       });
 
       if (existingInvoice) {
-        await transaction.rollback();
+        // await transaction.rollback();
         return res.status(409).json({
           error: "Invoice number already exists",
           message: "An invoice with this number already exists",
@@ -48,10 +50,17 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       }
     }
 
-    // Verify client exists (remove transaction from this query since client was created outside transaction)
+    // Verify client exists (add debugging)
+    console.log("Looking for client with ID:", clientId);
     const client = await db.Client.findByPk(clientId);
+    console.log("Found client:", client ? client.toJSON() : null);
+
     if (!client) {
-      await transaction.rollback();
+      console.log("Client not found. Available clients:");
+      const allClients = await db.Client.findAll();
+      console.log(allClients.map((c) => ({ id: c.id, name: c.name })));
+
+      // await transaction.rollback();
       return res.status(400).json({
         error: "Invalid client",
         message: "The specified client does not exist",
@@ -62,11 +71,11 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
     if (billFromId) {
       const billFromAddress = await db.BillFromAddress.findOne({
         where: { id: billFromId, user_id: req.user.userId },
-        transaction,
+        // transaction,
       });
 
       if (!billFromAddress) {
-        await transaction.rollback();
+        // await transaction.rollback();
         return res.status(400).json({
           error: "Invalid bill from address",
           message:
@@ -91,8 +100,8 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
         status,
         amount_paid: amountPaid,
         notes: notes || "",
-      },
-      { transaction }
+      }
+      // { transaction }
     );
 
     // Create invoice items
@@ -104,12 +113,12 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
           quantity: item.quantity,
           unit_price: item.unitPrice,
           total: item.total,
-        },
-        { transaction }
+        }
+        // { transaction }
       );
     }
 
-    await transaction.commit();
+    // await transaction.commit();
 
     res.status(201).json({
       message: "Invoice created successfully",
@@ -131,7 +140,7 @@ router.post("/", validateRequest(invoiceSchema), async (req, res) => {
       },
     });
   } catch (error) {
-    await transaction.rollback();
+    // await transaction.rollback();
     console.error("Invoice creation error:", error);
     res.status(500).json({
       error: "Failed to create invoice",
