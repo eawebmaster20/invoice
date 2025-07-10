@@ -198,8 +198,8 @@ router.get("/", async (req, res) => {
       order: [["created_at", "DESC"]],
     });
 
-    res.json({
-      invoices: invoices.map((invoice) => ({
+    res.json(
+      invoices.map((invoice) => ({
         id: invoice.id,
         invoiceNumber: invoice.invoice_number,
         invoiceDate: invoice.invoice_date,
@@ -241,8 +241,8 @@ router.get("/", async (req, res) => {
         notes: invoice.notes,
         createdAt: invoice.created_at,
         updatedAt: invoice.updated_at,
-      })),
-    });
+      }))
+    );
   } catch (error) {
     console.error("Invoices fetch error:", error);
     res.status(500).json({
