@@ -180,8 +180,8 @@ router.get("/", async (req, res) => {
       order: [["created_at", "DESC"]],
     });
 
-    res.json({
-      clients: clients.map((client) => ({
+    res.json(
+      clients.map((client) => ({
         id: client.id,
         name: client.name,
         email: client.email,
@@ -194,8 +194,8 @@ router.get("/", async (req, res) => {
         notes: client.notes,
         createdAt: client.created_at,
         updatedAt: client.updated_at,
-      })),
-    });
+      }))
+    );
   } catch (error) {
     console.error("Clients fetch error:", error);
     res.status(500).json({
