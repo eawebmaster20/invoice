@@ -147,19 +147,16 @@ router.post("/", validateRequest(clientSchema), async (req, res) => {
     });
 
     res.status(201).json({
-      message: "Client created successfully",
-      client: {
-        id: client.id,
-        name: client.name,
-        email: client.email,
-        phone: client.phone,
-        address: client.address,
-        city: client.city,
-        postalCode: client.postal_code,
-        country: client.country,
-        taxId: client.tax_id,
-        notes: client.notes,
-      },
+      id: client.id,
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+      address: client.address,
+      city: client.city,
+      postalCode: client.postal_code,
+      country: client.country,
+      taxId: client.tax_id,
+      notes: client.notes,
     });
   } catch (error) {
     console.error("Client creation error:", error);
